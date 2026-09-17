@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource, ILike, IsNull, Not } from 'typeorm';
+import { rankGroup } from '../competition/standings';
 import type { FindOptionsWhere } from 'typeorm';
 import {
   Player,
@@ -131,10 +132,10 @@ export class PublicService {
         }),
       ]);
     const completedMatches = tournament.matches.filter(
-      (match) => match.winnerTeamId,
+      (match) => match.winnerTeamId && match.metadata?.kind !== 'bye',
     ).length;
     const playableMatches = tournament.matches.filter(
-      (match) => match.teamAId && match.teamBId,
+      (match) => match.metadata?.kind !== 'bye',
     ).length;
     const groups = tournament.groups.map((group) => {
       const matches = tournament.matches.filter(
@@ -146,7 +147,14 @@ export class PublicService {
         name: group.name,
         sort_order: group.sortOrder,
         teams: teams.map(publicTeamResponse),
-        standings: this.standings(teams, matches),
+        standings: this.standings(
+          teams,
+          matches,
+          (
+            tournament.settings?.tie_breaks as
+              Record<string, { order?: string[] }> | undefined
+          )?.[group.id]?.order ?? [],
+        ),
         matches: matches.map(publicMatchResponse),
       };
     });
@@ -157,11 +165,17 @@ export class PublicService {
       groups,
       matches: tournament.matches.map(publicMatchResponse),
       bracket: tournament.matches
-        .filter((match) => ['semifinal', 'final'].includes(match.stage))
-        .sort((left, right) =>
-          `${left.stage === 'semifinal' ? 1 : 2}-${left.round}`.localeCompare(
-            `${right.stage === 'semifinal' ? 1 : 2}-${right.round}`,
-          ),
+        .filter((match) => match.stage !== 'group')
+        .sort(
+          (left, right) =>
+            Number(
+              left.metadata?.round_number ??
+                (left.stage === 'semifinal' ? 1 : 2),
+            ) -
+              Number(
+                right.metadata?.round_number ??
+                  (right.stage === 'semifinal' ? 1 : 2),
+              ) || left.round.localeCompare(right.round),
         )
         .map(publicMatchResponse),
       progress: {
@@ -208,57 +222,15 @@ export class PublicService {
     };
   }
 
-  private standings(teams: Team[], matches: TournamentMatch[]) {
-    const rows = new Map(
-      teams.map((team) => [
-        team.id,
-        {
-          team,
-          played: 0,
-          wins: 0,
-          losses: 0,
-          points_for: 0,
-          points_against: 0,
-          diff: 0,
-          points: 0,
-        },
-      ]),
-    );
-    for (const match of matches) {
-      if (
-        match.scoreA === null ||
-        match.scoreB === null ||
-        !match.teamAId ||
-        !match.teamBId
-      )
-        continue;
-      for (const side of [
-        { id: match.teamAId, for: match.scoreA, against: match.scoreB },
-        { id: match.teamBId, for: match.scoreB, against: match.scoreA },
-      ]) {
-        const row = rows.get(side.id);
-        if (!row) continue;
-        row.played++;
-        row.points_for += side.for;
-        row.points_against += side.against;
-        row.diff = row.points_for - row.points_against;
-        if (match.winnerTeamId === side.id) {
-          row.wins++;
-          row.points += 3;
-        } else {
-          row.losses++;
-        }
-      }
-    }
-    return [...rows.values()]
-      .sort(
-        (left, right) =>
-          right.points - left.points ||
-          right.wins - left.wins ||
-          right.diff - left.diff ||
-          right.points_for - left.points_for,
-      )
-      .map((row) => ({ ...row, team: publicTeamResponse(row.team) }));
+  private standings(
+    teams: Team[],
+    matches: TournamentMatch[],
+    tieOrder: string[] = [],
+  ) {
+    return rankGroup(teams, matches, tieOrder).map((row) => ({
+      ...row,
+      team: publicTeamResponse(row.team),
+    }));
   }
 
   private dateLabel(start?: Date | null, end?: Date | null) {

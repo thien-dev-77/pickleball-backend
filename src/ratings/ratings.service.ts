@@ -3,6 +3,7 @@ import { assessmentResponse, playerResponse } from '../common/serializers';
 import { DataSource } from 'typeorm';
 import { Player, RatingAssessment } from '../database/entities';
 import { AssessPlayerDto, CalculateRatingDto } from './ratings.dto';
+import { assertRatingEditable } from '../common/eligibility-lock';
 
 const RULES = {
   serve_consistency: { label: 'Giao bóng ổn định', points: 0.25 },
@@ -48,6 +49,7 @@ export class RatingsService {
     await this.db.getRepository(Player).findOneByOrFail({ id: playerId });
     const result = this.calculate(dto);
     const saved = await this.db.transaction(async (manager) => {
+      await assertRatingEditable(manager, playerId);
       const assessments = manager.getRepository(RatingAssessment);
       const assessment = await assessments.save(
         assessments.create({

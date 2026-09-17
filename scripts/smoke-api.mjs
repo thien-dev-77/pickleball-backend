@@ -1,4 +1,5 @@
 const baseUrl = process.env.API_BASE_URL || 'http://127.0.0.1:8001/api';
+if (process.env.ALLOW_SMOKE_MUTATIONS !== '1') throw new Error('This script creates persistent tournament history. Use only a disposable test database and set ALLOW_SMOKE_MUTATIONS=1.');
 const username = process.env.ADMIN_USERNAME || 'admin';
 const password = process.env.ADMIN_PASSWORD || 'admin123456';
 const runId = Date.now().toString(36);
@@ -65,6 +66,8 @@ try {
   await request(`/tournaments/${tournamentId}`, json('PUT', { description: 'Temporary integration test' }));
   await request(`/tournaments/${tournamentId}`);
   await request(`/public/tournaments/smoke-${runId}`);
+  await request(`/tournaments/${tournamentId}/registrations`, json('POST', { player_ids: playerIds, status: 'confirmed' }));
+  await request(`/tournaments/${tournamentId}/roster-lock`, json('POST', { locked: true }));
 
   const temporaryTeam = await request(`/tournaments/${tournamentId}/teams`, json('POST', {
     player_one_id: playerIds[0],

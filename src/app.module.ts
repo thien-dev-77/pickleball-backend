@@ -14,6 +14,7 @@ import { PublicModule } from './public-api/public.module';
 import { RatingsModule } from './ratings/ratings.module';
 import { TeamsModule } from './teams/teams.module';
 import { TournamentsModule } from './tournaments/tournaments.module';
+import { CompetitionModule } from './competition/competition.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { TournamentsModule } from './tournaments/tournaments.module';
       envFilePath: '.env',
     }),
     DatabaseModule,
+    CompetitionModule,
     AuthModule,
     PublicModule,
     PlayersModule,

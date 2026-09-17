@@ -13,7 +13,10 @@ import {
 
 export class MatchQueryDto {
   @IsOptional() @IsUUID() tournament_id?: string;
-  @IsOptional() @IsIn(['group', 'semifinal', 'final']) stage?: string;
+  @IsOptional()
+  @IsIn(['group', 'knockout', 'semifinal', 'final', 'bronze'])
+  stage?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(200) per_page = 50;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page = 1;
 }
 

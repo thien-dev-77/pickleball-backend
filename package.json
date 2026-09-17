@@ -22,6 +22,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:runtime": "node --no-experimental-require-module -e \"require('./dist/app.module.js'); console.log('CommonJS runtime OK')\"",
+    "db:migrate": "typeorm migration:run -d dist/database/data-source.js",
     "smoke:api": "node scripts/smoke-api.mjs"
   },
   "dependencies": {
@@ -31,8 +32,11 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/typeorm": "^11.0.3",
     "bcrypt": "^6.0.0",
+    "brackets-manager": "1.11.0",
+    "brackets-memory-db": "1.0.6",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "dotenv": "17.4.1",
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
@@ -65,7 +69,10 @@
     "typescript-eslint": "^8.20.0"
   },
   "overrides": {
-    "multer": "2.3.0"
+    "multer": "2.3.0",
+    "brackets-manager": {
+      "uuid": "11.1.1"
+    }
   },
   "jest": {
     "moduleFileExtensions": [

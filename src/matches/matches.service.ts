@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { DataSource, In } from 'typeorm';
-import type { DeepPartial, FindOptionsWhere } from 'typeorm';
+import { DataSource } from 'typeorm';
+import type { FindOptionsWhere } from 'typeorm';
+import { helpers } from 'brackets-manager';
 import {
   Tournament,
   TournamentGroup,
@@ -9,6 +10,7 @@ import {
 import { matchRelations } from '../database/relations';
 import { matchResponse, paginate } from '../common/serializers';
 import { businessValidation } from '../common/validation';
+import { CompetitionService } from '../competition/competition.service';
 import {
   GenerateRoundRobinDto,
   MatchQueryDto,
@@ -18,26 +20,31 @@ import {
 
 @Injectable()
 export class MatchesService {
-  constructor(private readonly db: DataSource) {}
-
+  constructor(
+    private readonly db: DataSource,
+    private readonly competition: CompetitionService,
+  ) {}
   async index(query: MatchQueryDto) {
     const where: FindOptionsWhere<TournamentMatch> = {
       ...(query.tournament_id ? { tournamentId: query.tournament_id } : {}),
       ...(query.stage ? { stage: query.stage } : {}),
     };
-    const perPage = 50;
     const [matches, total] = await this.db
       .getRepository(TournamentMatch)
       .findAndCount({
         where,
         relations: matchRelations,
         order: { scheduledAt: { direction: 'ASC', nulls: 'LAST' } },
-        skip: (query.page - 1) * perPage,
-        take: perPage,
+        skip: (query.page - 1) * query.per_page,
+        take: query.per_page,
       });
-    return paginate(matches.map(matchResponse), total, query.page, perPage);
+    return paginate(
+      matches.map(matchResponse),
+      total,
+      query.page,
+      query.per_page,
+    );
   }
-
   async show(id: string) {
     return matchResponse(
       await this.db
@@ -45,144 +52,164 @@ export class MatchesService {
         .findOneOrFail({ where: { id }, relations: matchRelations }),
     );
   }
-
   async update(id: string, dto: UpdateMatchDto) {
-    const repo = this.db.getRepository(TournamentMatch);
-    const match = await repo.findOneByOrFail({ id });
-    await repo.save(
-      repo.merge(match, {
-        ...(dto.round !== undefined ? { round: dto.round } : {}),
-        ...(dto.court !== undefined ? { court: dto.court } : {}),
-        ...(dto.scheduled_at !== undefined
-          ? {
-              scheduledAt: dto.scheduled_at ? new Date(dto.scheduled_at) : null,
-            }
-          : {}),
-      }),
-    );
-    return this.show(id);
-  }
-
-  async result(id: string, dto: MatchResultDto) {
-    if (dto.score_a === dto.score_b)
-      businessValidation('score_b', 'Kết quả trận đấu không được hòa.');
     const current = await this.db
       .getRepository(TournamentMatch)
       .findOneByOrFail({ id });
-    if (!current.teamAId || !current.teamBId)
-      businessValidation(
-        'score_a',
-        'Trận đấu chưa đủ hai đội để nhập kết quả.',
-      );
-    const winnerTeamId =
-      dto.score_a > dto.score_b ? current.teamAId : current.teamBId;
-    await this.db.transaction(async (manager) => {
-      if (current.stage === 'group') {
-        await manager.delete(TournamentMatch, {
-          tournamentId: current.tournamentId,
-          stage: In(['semifinal', 'final']),
-        });
-        await manager.update(Tournament, current.tournamentId, {
-          status: 'group',
-        });
-      }
-      await manager.update(TournamentMatch, id, {
-        scoreA: dto.score_a,
-        scoreB: dto.score_b,
-        winnerTeamId,
-      });
-      if (current.stage === 'semifinal') {
-        const final = await manager.findOneBy(TournamentMatch, {
-          tournamentId: current.tournamentId,
-          stage: 'final',
-        });
-        if (final)
-          await manager.update(TournamentMatch, final.id, {
-            ...(current.round === 'Bán kết 1'
-              ? { teamAId: winnerTeamId }
-              : { teamBId: winnerTeamId }),
-            scoreA: null,
-            scoreB: null,
-            winnerTeamId: null,
+    await this.competition.mutate(
+      current.tournamentId,
+      async (manager, tournament) => {
+        const match = await manager.findOneByOrFail(TournamentMatch, { id });
+        if (match.winnerTeamId || tournament.settings?.finalized)
+          businessValidation(
+            'match',
+            'Trận đã có kết quả, không được sửa lịch.',
+          );
+        const time =
+          dto.scheduled_at !== undefined
+            ? dto.scheduled_at
+              ? new Date(dto.scheduled_at)
+              : null
+            : match.scheduledAt;
+        const court = dto.court !== undefined ? dto.court : match.court;
+        const slot = Number(match.metadata?.slot_minutes ?? 30) * 60000;
+        if (
+          time &&
+          ((tournament.startsAt && time < tournament.startsAt) ||
+            (tournament.endsAt &&
+              time.getTime() + slot > tournament.endsAt.getTime()))
+        )
+          businessValidation('scheduled_at', 'Lịch nằm ngoài thời gian giải.');
+        if (time) {
+          const fixtures = await manager.findBy(TournamentMatch, {
+            tournamentId: current.tournamentId,
           });
-      }
-      if (current.stage === 'final')
-        await manager.update(Tournament, current.tournamentId, {
-          status: 'completed',
+          if (
+            fixtures.some(
+              (m) =>
+                m.id !== id &&
+                m.scheduledAt &&
+                ((court &&
+                  m.court === court &&
+                  m.scheduledAt.getTime() < time.getTime() + slot &&
+                  time.getTime() <
+                    m.scheduledAt.getTime() +
+                      Number(m.metadata?.slot_minutes ?? 30) * 60000) ||
+                  ([m.teamAId, m.teamBId].some(
+                    (team) =>
+                      team && [match.teamAId, match.teamBId].includes(team),
+                  ) &&
+                    m.scheduledAt.getTime() <
+                      time.getTime() +
+                        slot +
+                        Number(match.metadata?.rest_minutes ?? 0) * 60000 &&
+                    time.getTime() <
+                      m.scheduledAt.getTime() +
+                        (Number(m.metadata?.slot_minutes ?? 30) +
+                          Number(m.metadata?.rest_minutes ?? 0)) *
+                          60000)),
+            )
+          )
+            businessValidation(
+              'scheduled_at',
+              'Trùng sân, suất thi đấu hoặc chưa đủ thời gian nghỉ.',
+            );
+        }
+        await manager.update(TournamentMatch, id, {
+          ...(dto.round !== undefined ? { round: dto.round } : {}),
+          court,
+          scheduledAt: time,
         });
+      },
+    );
+    return this.show(id);
+  }
+  async result(id: string, dto: MatchResultDto) {
+    await this.competition.score(id, {
+      games: [{ a: dto.score_a, b: dto.score_b }],
+      kind: 'normal',
     });
     return this.show(id);
   }
-
   async generateRoundRobin(groupId: string, dto: GenerateRoundRobinDto) {
-    const group = await this.db.getRepository(TournamentGroup).findOneOrFail({
-      where: { id: groupId },
-      relations: { teams: true },
-      order: { teams: { position: 'ASC' } },
-    });
-    const teamIds: (string | null)[] = group.teams.map(
-      (membership) => membership.teamId,
-    );
-    if (teamIds.length < 2)
-      businessValidation(
-        'group',
-        'Bảng đấu cần ít nhất 2 đội để tạo lịch vòng tròn.',
-      );
-    if (teamIds.length % 2 !== 0) teamIds.push(null);
-    const startsAt = dto.starts_at ? new Date(dto.starts_at) : null;
-    const courtCount = dto.court_count ?? 2;
-    const interval = dto.round_interval_minutes ?? 45;
-    const matchesPerRound = Math.floor(teamIds.length / 2);
-    const slotsPerRound = Math.ceil(matchesPerRound / courtCount);
-    const rows: DeepPartial<TournamentMatch>[] = [];
-    const rotation = [...teamIds];
-    for (let round = 0; round < teamIds.length - 1; round++) {
-      for (let pair = 0; pair < matchesPerRound; pair++) {
-        const teamAId = rotation[pair],
-          teamBId = rotation[rotation.length - 1 - pair];
-        if (!teamAId || !teamBId) continue;
-        rows.push({
-          tournamentId: group.tournamentId,
-          groupId,
-          stage: 'group',
-          round: `Lượt ${round + 1}`,
-          court: `Sân ${(pair % courtCount) + 1}`,
-          teamAId,
-          teamBId,
-          scheduledAt: startsAt
-            ? new Date(
-                startsAt.getTime() +
-                  (round * slotsPerRound + Math.floor(pair / courtCount)) *
-                    interval *
-                    60000,
-              )
-            : null,
+    const current = await this.db
+      .getRepository(TournamentGroup)
+      .findOneByOrFail({ id: groupId });
+    await this.competition.mutate(
+      current.tournamentId,
+      async (manager, tournament: Tournament) => {
+        const matches = await manager.findBy(TournamentMatch, {
+          tournamentId: current.tournamentId,
         });
-      }
-      const fixed = rotation.shift()!,
-        last = rotation.pop()!;
-      rotation.unshift(last);
-      rotation.unshift(fixed);
-    }
-    const ids = await this.db.transaction(async (manager) => {
-      await manager.delete(TournamentMatch, {
-        tournamentId: group.tournamentId,
-        stage: In(['semifinal', 'final']),
-      });
-      await manager.delete(TournamentMatch, { groupId });
-      const repo = manager.getRepository(TournamentMatch);
-      const created = await repo.save(rows.map((row) => repo.create(row)));
-      await manager.update(Tournament, group.tournamentId, { status: 'group' });
-      return created.map((match) => match.id);
-    });
+        if (
+          matches.some((m) => m.winnerTeamId) ||
+          matches.some((m) => m.groupId === groupId)
+        )
+          businessValidation(
+            'matches',
+            'Lịch đã tồn tại hoặc giải đã có kết quả. Dùng trang quản lý giải để xếp lại lịch toàn giải.',
+          );
+        const group = await manager.findOneOrFail(TournamentGroup, {
+          where: { id: groupId },
+          relations: { teams: true },
+        });
+        if (group.teams.length < 2)
+          businessValidation('group', 'Bảng cần ít nhất hai suất thi đấu.');
+        if (dto.court_count > tournament.courts)
+          businessValidation('court_count', 'Số sân vượt cấu hình giải.');
+        let offset = 0;
+        for (const [round, pairs] of helpers
+          .makeRoundRobinMatches(group.teams.map((t) => t.teamId))
+          .entries())
+          for (const [a, b] of pairs) {
+            if (!a || !b) continue;
+            const court = `Sân ${(offset % dto.court_count) + 1}`;
+            let time = dto.starts_at
+              ? new Date(
+                  new Date(dto.starts_at).getTime() +
+                    Math.floor(offset / dto.court_count) *
+                      dto.round_interval_minutes *
+                      60000,
+                )
+              : null;
+            if (time)
+              while (
+                matches.some(
+                  (m) =>
+                    m.scheduledAt &&
+                    m.court === court &&
+                    Math.abs(m.scheduledAt.getTime() - time!.getTime()) <
+                      dto.round_interval_minutes * 60000,
+                )
+              )
+                time = new Date(
+                  time.getTime() + dto.round_interval_minutes * 60000,
+                );
+            const match = await manager.save(
+              TournamentMatch,
+              manager.create(TournamentMatch, {
+                tournamentId: current.tournamentId,
+                groupId,
+                stage: 'group',
+                round: `Lượt ${round + 1}`,
+                court,
+                teamAId: a,
+                teamBId: b,
+                scheduledAt: time,
+                metadata: { slot_minutes: dto.round_interval_minutes },
+              }),
+            );
+            matches.push(match);
+            offset++;
+          }
+        await manager.update(Tournament, tournament.id, { status: 'group' });
+      },
+    );
     return (
       await this.db.getRepository(TournamentMatch).find({
-        where: { id: In(ids) },
+        where: { groupId },
         relations: matchRelations,
-        order: {
-          scheduledAt: { direction: 'ASC', nulls: 'LAST' },
-          createdAt: 'ASC',
-        },
+        order: { createdAt: 'ASC' },
       })
     ).map(matchResponse);
   }

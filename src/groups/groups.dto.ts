@@ -1,6 +1,8 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -23,4 +25,6 @@ export class UpdateGroupDto {
 
 export class RandomizeGroupsDto {
   @Type(() => Number) @IsInt() @Min(1) @Max(32) group_count!: number;
+  @IsOptional() @IsIn(['random', 'seeded']) mode = 'random';
+  @IsOptional() @IsBoolean() replace = false;
 }

@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource, ILike, MoreThanOrEqual } from 'typeorm';
 import type { FindOptionsWhere } from 'typeorm';
-import { Player } from '../database/entities';
+import { Player, Team, TournamentRegistration } from '../database/entities';
+import { businessValidation } from '../common/validation';
+import { assertRatingEditable } from '../common/eligibility-lock';
 import { paginate, playerResponse } from '../common/serializers';
 import {
   CreatePlayerDto,
@@ -63,6 +65,11 @@ export class PlayersService {
   async update(id: string, dto: UpdatePlayerDto) {
     const repo = this.db.getRepository(Player);
     const player = await repo.findOneByOrFail({ id });
+    if (
+      (dto.rating !== undefined && dto.rating !== Number(player.rating)) ||
+      (dto.gender !== undefined && dto.gender !== player.gender)
+    )
+      await assertRatingEditable(this.db.manager, id);
     repo.merge(player, {
       ...(dto.name !== undefined ? { name: dto.name } : {}),
       ...(dto.gender !== undefined ? { gender: dto.gender } : {}),
@@ -76,6 +83,18 @@ export class PlayersService {
 
   async remove(id: string) {
     const repo = this.db.getRepository(Player);
+    if (
+      (await this.db
+        .getRepository(TournamentRegistration)
+        .countBy({ playerId: id })) ||
+      (await this.db
+        .getRepository(Team)
+        .count({ where: [{ playerOneId: id }, { playerTwoId: id }] }))
+    )
+      businessValidation(
+        'player',
+        'VĐV đã tham gia giải, không được xóa hồ sơ và lịch sử thi đấu.',
+      );
     await repo.delete((await repo.findOneByOrFail({ id })).id);
   }
 }

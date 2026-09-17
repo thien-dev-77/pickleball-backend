@@ -122,6 +122,7 @@ export function matchResponse(match: RecordLike) {
     score_a: match.scoreA ?? null,
     score_b: match.scoreB ?? null,
     winner_team_id: match.winnerTeamId ?? null,
+    metadata: match.metadata ?? null,
     scheduled_at: iso(match.scheduledAt),
     created_at: iso(match.createdAt),
     updated_at: iso(match.updatedAt),
@@ -156,6 +157,9 @@ export function publicMatchResponse(match: RecordLike) {
     score_a: match.scoreA ?? null,
     score_b: match.scoreB ?? null,
     winner_team_id: match.winnerTeamId ?? null,
+    games: match.metadata?.games ?? [],
+    result_kind: match.metadata?.kind ?? null,
+    round_number: match.metadata?.round_number ?? null,
     team_a: publicTeamResponse(match.teamA),
     team_b: publicTeamResponse(match.teamB),
   };

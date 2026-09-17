@@ -12,11 +12,13 @@ import {
 export class CreateTeamDto {
   @IsOptional() @IsString() @MaxLength(160) name?: string | null;
   @IsUUID() player_one_id!: string;
-  @IsUUID() player_two_id!: string;
+  @IsOptional() @IsUUID() player_two_id?: string | null;
   @IsOptional() @IsInt() @Min(1) seed?: number | null;
 }
 
 export class UpdateTeamDto {
+  @IsOptional() @IsUUID() player_one_id?: string;
+  @IsOptional() @IsUUID() player_two_id?: string | null;
   @IsOptional() @IsString() @MaxLength(160) name?: string;
   @IsOptional() @IsInt() @Min(1) seed?: number | null;
 }

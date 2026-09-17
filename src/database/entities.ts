@@ -9,6 +9,7 @@ import {
   PrimaryColumn,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  Unique,
 } from 'typeorm';
 import type { Relation, ValueTransformer } from 'typeorm';
 
@@ -182,6 +183,10 @@ export class GroupTeam extends Timestamps {
 
 @Entity('tournament_matches')
 export class TournamentMatch extends UuidEntity {
+  @Column({ type: 'jsonb', nullable: true }) metadata: Record<
+    string,
+    unknown
+  > | null = null;
   @Column({ name: 'tournament_id', type: 'uuid' }) tournamentId!: string;
   @Column({ name: 'group_id', type: 'uuid', nullable: true }) groupId:
     string | null = null;
@@ -276,6 +281,22 @@ export class AdminSession extends UuidEntity {
   lastUsedAt: Date | null = null;
 }
 
+@Entity('tournament_registrations')
+@Unique(['tournamentId', 'playerId'])
+export class TournamentRegistration extends UuidEntity {
+  @Column({ name: 'tournament_id', type: 'uuid' }) tournamentId!: string;
+  @Column({ name: 'player_id', type: 'uuid' }) playerId!: string;
+  @Column({ type: 'varchar', length: 20, default: 'registered' }) status =
+    'registered';
+  @Column({ type: 'text', nullable: true }) notes: string | null = null;
+  @ManyToOne(() => Tournament, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'tournament_id' })
+  tournament!: Relation<Tournament>;
+  @ManyToOne(() => Player, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'player_id' })
+  player!: Relation<Player>;
+}
+
 export const databaseEntities = [
   Player,
   Tournament,
@@ -285,4 +306,5 @@ export const databaseEntities = [
   TournamentMatch,
   RatingAssessment,
   AdminSession,
+  TournamentRegistration,
 ];

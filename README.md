@@ -21,7 +21,9 @@ CORS_ORIGINS=https://example.com
 PORT=8001
 ```
 
-TypeORM ánh xạ trực tiếp các bảng hiện hữu qua `src/database/entities.ts`. `synchronize`, `migrationsRun` và việc tự cài extension đều bị tắt; không cần generate client hoặc migrate lại database đã có.
+TypeORM ánh xạ trực tiếp các bảng hiện hữu qua `src/database/entities.ts`. `synchronize`, `migrationsRun` và việc tự cài extension đều bị tắt. Bản nâng cấp nghiệp vụ cần chạy `npm run build` rồi `npm run db:migrate` từ local trước khi deploy; migration chỉ thêm cấu trúc, giữ nguyên kết quả hiện hữu.
+
+Quy trình, điều lệ, giới hạn và API mới: [WORKFLOW.md](WORKFLOW.md).
 
 ### Supabase: DNS và SSL
 
@@ -117,7 +119,7 @@ npm run test:e2e -- --runInBand
 npm run smoke:api
 ```
 
-`smoke:api` cần server NestJS đang chạy. Lệnh tạo một giải tạm, đi hết luồng nghiệp vụ rồi tự xóa dữ liệu kiểm tra.
+`smoke:api` cần server NestJS dùng database kiểm thử riêng và `ALLOW_SMOKE_MUTATIONS=1`. Lệnh tạo giải và lịch sử kết quả; không thể tự xóa giải đã thi đấu theo khóa nghiệp vụ mới. Không chạy trên production.
 
 `test:e2e` dùng PostgreSQL emulator `pg-mem` trong bộ nhớ, không truy cập Supabase. Bộ kiểm thử bao gồm API public/admin, phiên đăng nhập, CRUD, bộ lọc, JSON nullable, điểm trình, avatar, ghép đội, vòng bảng và nhánh đấu. Emulator không thay thế việc kiểm tra transaction rollback và kết nối trên PostgreSQL thật.
 
