@@ -3,8 +3,7 @@
   "rootDir": ".",
   "testEnvironment": "node",
   "testRegex": ".e2e-spec.ts$",
-  "transformIgnorePatterns": ["node_modules/(?!@nestjs/config/)"],
   "transform": {
-    "^.+\\.(t|j)s$": ["ts-jest", { "tsconfig": { "allowJs": true, "module": "CommonJS", "moduleResolution": "node", "resolvePackageJsonExports": false } }]
+    "^.+\\.(t|j)s$": "ts-jest"
   }
 }

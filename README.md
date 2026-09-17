@@ -111,6 +111,7 @@ Authorization: Bearer <token>
 ```bash
 npm run lint
 npm run build
+npm run test:runtime
 npm test -- --runInBand
 npm run test:e2e -- --runInBand
 npm run smoke:api
@@ -119,5 +120,9 @@ npm run smoke:api
 `smoke:api` cần server NestJS đang chạy. Lệnh tạo một giải tạm, đi hết luồng nghiệp vụ rồi tự xóa dữ liệu kiểm tra.
 
 `test:e2e` dùng PostgreSQL emulator `pg-mem` trong bộ nhớ, không truy cập Supabase. Bộ kiểm thử bao gồm API public/admin, phiên đăng nhập, CRUD, bộ lọc, JSON nullable, điểm trình, avatar, ghép đội, vòng bảng và nhánh đấu. Emulator không thay thế việc kiểm tra transaction rollback và kết nối trên PostgreSQL thật.
+
+`@nestjs/config` duoc co dinh o `4.0.4`, tuong thich NestJS 11 va CommonJS.
+`test:runtime` nap module da build voi ESM require interop bi tat de bat loi
+`ERR_REQUIRE_ESM` truoc khi deploy. Chay lenh nay sau `npm run build`.
 
 Tích hợp sử dụng `TypeOrmModule`, repository và `DataSource.transaction` theo [tài liệu NestJS](https://docs.nestjs.com/techniques/database).
