@@ -32,6 +32,10 @@ export class RegistrationUpdateDto {
 export class RosterLockDto {
   @IsBoolean() locked!: boolean;
 }
+export class TournamentOperationDto {
+  @IsIn(['pause', 'resume', 'cancel']) action!: 'pause' | 'resume' | 'cancel';
+  @IsOptional() @IsString() @MaxLength(1000) reason?: string;
+}
 export class EntriesDto {
   @IsOptional() @IsArray() @IsUUID('all', { each: true }) player_ids?: string[];
   @IsOptional() @IsBoolean() balance = true;

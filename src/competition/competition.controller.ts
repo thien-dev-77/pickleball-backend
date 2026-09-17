@@ -21,11 +21,18 @@ import {
   RosterLockDto,
   ScheduleDto,
   ScoreDto,
+  TournamentOperationDto,
 } from './competition.dto';
 
 @Controller()
 export class CompetitionController {
   constructor(private readonly competition: CompetitionService) {}
+  @Post('tournaments/:id/operation') operation(
+    @Param('id') id: string,
+    @Body() body: TournamentOperationDto,
+  ) {
+    return this.competition.operation(id, body);
+  }
   @Delete('tournaments/:id/playoff') resetPlayoff(@Param('id') id: string) {
     return this.competition.resetPlayoff(id);
   }

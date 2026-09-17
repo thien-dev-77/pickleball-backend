@@ -36,6 +36,8 @@ export function tournamentResponse(tournament: RecordLike) {
     name: tournament.name,
     format: tournament.format,
     status: tournament.status,
+    operation_status: tournament.settings?.operation_status ?? 'active',
+    operation_reason: tournament.settings?.operation_reason ?? null,
     category: tournament.category ?? null,
     location: tournament.location ?? null,
     description: tournament.description ?? null,
@@ -148,6 +150,8 @@ export function publicMatchResponse(match: RecordLike) {
     tournament_id: match.tournamentId,
     tournament_slug: match.tournament?.slug ?? null,
     tournament_name: match.tournament?.name ?? null,
+    tournament_operation_status:
+      match.tournament?.settings?.operation_status ?? 'active',
     group_id: match.groupId ?? null,
     group_name: match.group?.name ?? null,
     stage: match.stage,

@@ -3,7 +3,7 @@ import { DataSource, ILike, MoreThanOrEqual } from 'typeorm';
 import type { FindOptionsWhere } from 'typeorm';
 import { Player, Team, TournamentRegistration } from '../database/entities';
 import { businessValidation } from '../common/validation';
-import { assertRatingEditable } from '../common/eligibility-lock';
+import { preserveRosterSnapshot } from '../common/roster-snapshot';
 import { paginate, playerResponse } from '../common/serializers';
 import {
   CreatePlayerDto,
@@ -63,22 +63,52 @@ export class PlayersService {
   }
 
   async update(id: string, dto: UpdatePlayerDto) {
-    const repo = this.db.getRepository(Player);
-    const player = await repo.findOneByOrFail({ id });
-    if (
-      (dto.rating !== undefined && dto.rating !== Number(player.rating)) ||
-      (dto.gender !== undefined && dto.gender !== player.gender)
-    )
-      await assertRatingEditable(this.db.manager, id);
-    repo.merge(player, {
-      ...(dto.name !== undefined ? { name: dto.name } : {}),
-      ...(dto.gender !== undefined ? { gender: dto.gender } : {}),
-      ...(dto.avatar_url !== undefined ? { avatarUrl: dto.avatar_url } : {}),
-      ...(dto.rating !== undefined ? { rating: dto.rating } : {}),
-      ...(dto.hand !== undefined ? { hand: dto.hand } : {}),
-      ...(dto.metadata !== undefined ? { metadata: dto.metadata } : {}),
+    return this.db.transaction(async (manager) => {
+      await preserveRosterSnapshot(manager, id);
+      const repo = manager.getRepository(Player);
+      const player = await repo.findOneOrFail({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      const teams =
+        dto.name !== undefined && dto.name !== player.name
+          ? await manager.find(Team, {
+              where: [{ playerOneId: id }, { playerTwoId: id }],
+              relations: { playerOne: true, playerTwo: true, tournament: true },
+            })
+          : [];
+      const renamed = teams.filter(
+        (team) =>
+          team.name ===
+          [team.playerOne, team.playerTwo]
+            .filter((p): p is Player => !!p)
+            .map((p) => p.name)
+            .join(' / '),
+      );
+      repo.merge(player, {
+        ...(dto.name !== undefined ? { name: dto.name } : {}),
+        ...(dto.gender !== undefined ? { gender: dto.gender } : {}),
+        ...(dto.avatar_url !== undefined ? { avatarUrl: dto.avatar_url } : {}),
+        ...(dto.rating !== undefined ? { rating: dto.rating } : {}),
+        ...(dto.hand !== undefined ? { hand: dto.hand } : {}),
+        ...(dto.metadata !== undefined ? { metadata: dto.metadata } : {}),
+      });
+      const saved = await repo.save(player);
+      for (const team of renamed) {
+        if (
+          team.tournament.settings?.finalized ||
+          team.tournament.status === 'completed'
+        )
+          continue;
+        await manager.update(Team, team.id, {
+          name: [team.playerOne, team.playerTwo]
+            .filter((p): p is Player => !!p)
+            .map((p) => (p.id === id ? saved.name : p.name))
+            .join(' / '),
+        });
+      }
+      return playerResponse(saved);
     });
-    return playerResponse(await repo.save(player));
   }
 
   async remove(id: string) {

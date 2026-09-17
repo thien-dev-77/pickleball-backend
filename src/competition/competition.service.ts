@@ -38,8 +38,10 @@ import {
   RegistrationUpdateDto,
   ScheduleDto,
   ScoreDto,
+  TournamentOperationDto,
 } from './competition.dto';
 import { rankGroup } from './standings';
+import { rosterPlayer, rosterSnapshot } from '../common/roster-snapshot';
 
 type Rules = {
   division: string;
@@ -113,6 +115,12 @@ export class CompetitionService {
         status: r.status,
         notes: r.notes,
         player: playerResponse(r.player),
+        entry_profile: tournament.settings?.roster_locked
+          ? {
+              rating: rosterPlayer(r.player, tournament).rating,
+              gender: rosterPlayer(r.player, tournament).gender,
+            }
+          : null,
       })),
       teams: teams.map(teamResponse),
       groups: groups.map((g) => ({
@@ -141,6 +149,7 @@ export class CompetitionService {
     id: string,
     action: (manager: EntityManager, tournament: Tournament) => Promise<T>,
     allowFinalized = false,
+    allowStopped = false,
   ): Promise<T> {
     return this.db.transaction(async (manager) => {
       const tournament = await manager.findOneOrFail(Tournament, {
@@ -152,8 +161,67 @@ export class CompetitionService {
           'tournament',
           'Giải đã chốt, không được thay đổi dữ liệu.',
         );
+      if (!allowStopped && tournament.settings?.operation_status === 'paused')
+        businessValidation(
+          'tournament',
+          'Giải đang tạm ngừng. Tiếp tục giải trước khi thay đổi dữ liệu thi đấu.',
+        );
+      if (
+        !allowStopped &&
+        tournament.settings?.operation_status === 'cancelled'
+      )
+        businessValidation(
+          'tournament',
+          'Giải đã hủy, không được thay đổi dữ liệu thi đấu.',
+        );
       return action(manager, tournament);
     });
+  }
+
+  async operation(id: string, dto: TournamentOperationDto) {
+    await this.mutate(
+      id,
+      async (manager, tournament) => {
+        const state = tournament.settings?.operation_status ?? 'active';
+        if (state === 'cancelled')
+          businessValidation(
+            'action',
+            'Giải đã hủy, không thể tiếp tục hoặc đổi trạng thái.',
+          );
+        if (tournament.status === 'completed')
+          businessValidation(
+            'action',
+            'Giải đã hoàn thành, không thể ngừng hoặc hủy.',
+          );
+        if (dto.action === 'resume' && state !== 'paused')
+          businessValidation('action', 'Chỉ tiếp tục giải đang tạm ngừng.');
+        if (dto.action === 'pause' && state !== 'active')
+          businessValidation('action', 'Giải đã được tạm ngừng.');
+        const reason = dto.reason?.trim() || null;
+        if (dto.action !== 'resume' && !reason)
+          businessValidation('reason', 'Nhập lý do tạm ngừng hoặc hủy giải.');
+        const at = new Date().toISOString();
+        const history = (tournament.settings?.operation_history ??
+          []) as unknown[];
+        const settings: Record<string, unknown> = {
+          ...tournament.settings,
+          operation_status:
+            dto.action === 'pause'
+              ? 'paused'
+              : dto.action === 'cancel'
+                ? 'cancelled'
+                : 'active',
+          operation_reason: dto.action === 'resume' ? null : reason,
+          operation_changed_at: at,
+          operation_history: [...history, { action: dto.action, reason, at }],
+        };
+        tournament.settings = settings;
+        await manager.save(Tournament, tournament);
+      },
+      false,
+      true,
+    );
+    return this.workspace(id);
   }
 
   tieOrder(tournament: Tournament, groupId: string): string[] {
@@ -382,6 +450,7 @@ export class CompetitionService {
 
   async rosterLock(id: string, locked: boolean) {
     await this.mutate(id, async (manager, tournament) => {
+      if (locked && tournament.settings?.roster_locked) return;
       if (await manager.countBy(TournamentGroup, { tournamentId: id }))
         businessValidation(
           'roster',
@@ -404,9 +473,13 @@ export class CompetitionService {
           businessValidation('roster', 'Giải đôi cần số VĐV chẵn.');
         confirmed.forEach((r) => this.eligible(r.player, tournament));
       }
-      await manager.update(Tournament, id, {
-        settings: { ...tournament.settings, roster_locked: locked },
-      });
+      const settings: Record<string, unknown> = {
+        ...tournament.settings,
+        roster_locked: locked,
+        roster_snapshot: locked ? rosterSnapshot(registrations) : null,
+      };
+      tournament.settings = settings;
+      await manager.save(Tournament, tournament);
     });
     return this.workspace(id);
   }
@@ -473,8 +546,11 @@ export class CompetitionService {
       )
     )
       businessValidation('player_ids', 'VĐV đã thuộc suất thi đấu khác.');
-    const players = playerIds.map(
-      (id) => registrations.find((r) => r.playerId === id)!.player,
+    const players = playerIds.map((id) =>
+      rosterPlayer(
+        registrations.find((r) => r.playerId === id)!.player,
+        tournament,
+      ),
     );
     this.validateMembers(players, tournament);
     return players;
@@ -530,7 +606,7 @@ export class CompetitionService {
         );
       const pool = registrations
         .filter((r) => ids.includes(r.playerId))
-        .map((r) => r.player)
+        .map((r) => rosterPlayer(r.player, tournament))
         .sort((a, b) => b.rating - a.rating);
       const entries: Player[][] = [];
       if (tournament.format === 'single')

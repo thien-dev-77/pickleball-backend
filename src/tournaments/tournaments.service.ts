@@ -91,6 +91,11 @@ export class TournamentsService {
           'rating_applied',
           'competition',
           'tie_breaks',
+          'operation_status',
+          'operation_reason',
+          'operation_changed_at',
+          'operation_history',
+          'roster_snapshot',
           'finalized_at',
           'qualifiers_per_group',
         ].includes(key),
@@ -132,108 +137,124 @@ export class TournamentsService {
   }
 
   async update(id: string, dto: UpdateTournamentDto) {
-    await this.competition.mutate(id, async (manager, item) => {
-      const count = await manager.countBy(Team, { tournamentId: id });
-      if (item.settings?.finalized)
-        businessValidation('tournament', 'Giải đã chốt, không được chỉnh sửa.');
-      const registrations = await manager.findBy(TournamentRegistration, {
-        tournamentId: id,
-      });
-      const capacity =
-        (dto.max_teams ?? item.maxTeams) *
-        ((dto.format ?? item.format) === 'single' ? 1 : 2);
-      if (
-        registrations.filter((r) => r.status !== 'withdrawn').length > capacity
-      )
-        businessValidation(
-          'max_teams',
-          'Sức chứa nhỏ hơn danh sách đã đăng ký.',
-        );
-      if (
-        dto.format &&
-        dto.format !== item.format &&
-        (count || item.settings?.roster_locked)
-      )
-        businessValidation(
-          'format',
-          'Không đổi đơn/đôi sau khi chốt danh sách hoặc tạo suất thi đấu.',
-        );
-      if (dto.max_teams !== undefined && dto.max_teams < count)
-        businessValidation(
-          'max_teams',
-          'Số suất tối đa nhỏ hơn danh sách hiện tại.',
-        );
-      if (dto.status !== undefined && dto.status !== item.status)
-        businessValidation(
-          'status',
-          'Trạng thái giải được cập nhật qua quy trình thi đấu.',
-        );
-      if (dto.settings !== undefined) {
-        const protectedKeys = [
-          'roster_locked',
-          'bracket_engine',
-          'finalized',
-          'rating_applied',
-          'finalized_at',
-          'competition',
-          'qualifiers_per_group',
-          'tie_breaks',
-        ];
+    await this.competition.mutate(
+      id,
+      async (manager, item) => {
+        const count = await manager.countBy(Team, { tournamentId: id });
+        if (item.settings?.finalized)
+          businessValidation(
+            'tournament',
+            'Giải đã chốt, không được chỉnh sửa.',
+          );
+        const registrations = await manager.findBy(TournamentRegistration, {
+          tournamentId: id,
+        });
+        const capacity =
+          (dto.max_teams ?? item.maxTeams) *
+          ((dto.format ?? item.format) === 'single' ? 1 : 2);
         if (
-          dto.settings &&
-          Object.keys(dto.settings).some((key) => protectedKeys.includes(key))
+          registrations.filter((r) => r.status !== 'withdrawn').length >
+          capacity
         )
           businessValidation(
-            'settings',
-            'Dùng API điều lệ, không ghi đè trạng thái nội bộ.',
+            'max_teams',
+            'Sức chứa nhỏ hơn danh sách đã đăng ký.',
           );
-        const internal = Object.fromEntries(
-          Object.entries(item.settings ?? {}).filter(([key]) =>
-            protectedKeys.includes(key),
-          ),
-        );
-        dto.settings = Object.keys(internal).length
-          ? { ...dto.settings, ...internal }
-          : dto.settings;
-      }
-      const data = this.data(dto);
-      const start =
-        data.startsAt !== undefined
-          ? (data.startsAt as Date | null)
-          : item.startsAt;
-      const end =
-        data.endsAt !== undefined ? (data.endsAt as Date | null) : item.endsAt;
-      if (start && end && start >= end)
-        businessValidation('ends_at', 'Thời gian kết thúc phải sau bắt đầu.');
-      const fixtures = await manager.findBy(TournamentMatch, {
-        tournamentId: id,
-      });
-      if (
-        fixtures.some(
-          (m) =>
-            m.scheduledAt &&
-            ((start && m.scheduledAt < start) ||
-              (end &&
-                m.scheduledAt.getTime() +
-                  Number(m.metadata?.slot_minutes ?? 30) * 60000 >
-                  end.getTime())),
+        if (
+          dto.format &&
+          dto.format !== item.format &&
+          (count || item.settings?.roster_locked)
         )
-      )
-        businessValidation(
-          'starts_at',
-          'Khoảng thời gian mới không chứa toàn bộ lịch thi đấu.',
-        );
-      if (
-        dto.courts !== undefined &&
-        (dto.courts ?? 2) < item.courts &&
-        fixtures.some((m) => m.court)
-      )
-        businessValidation(
-          'courts',
-          'Không giảm số sân sau khi đã xếp lịch; cần xếp lại lịch trước.',
-        );
-      await manager.save(Tournament, manager.merge(Tournament, item, data));
-    });
+          businessValidation(
+            'format',
+            'Không đổi đơn/đôi sau khi chốt danh sách hoặc tạo suất thi đấu.',
+          );
+        if (dto.max_teams !== undefined && dto.max_teams < count)
+          businessValidation(
+            'max_teams',
+            'Số suất tối đa nhỏ hơn danh sách hiện tại.',
+          );
+        if (dto.status !== undefined && dto.status !== item.status)
+          businessValidation(
+            'status',
+            'Trạng thái giải được cập nhật qua quy trình thi đấu.',
+          );
+        if (dto.settings !== undefined) {
+          const protectedKeys = [
+            'operation_status',
+            'operation_reason',
+            'operation_changed_at',
+            'operation_history',
+            'roster_snapshot',
+            'roster_locked',
+            'bracket_engine',
+            'finalized',
+            'rating_applied',
+            'finalized_at',
+            'competition',
+            'qualifiers_per_group',
+            'tie_breaks',
+          ];
+          if (
+            dto.settings &&
+            Object.keys(dto.settings).some((key) => protectedKeys.includes(key))
+          )
+            businessValidation(
+              'settings',
+              'Dùng API điều lệ, không ghi đè trạng thái nội bộ.',
+            );
+          const internal = Object.fromEntries(
+            Object.entries(item.settings ?? {}).filter(([key]) =>
+              protectedKeys.includes(key),
+            ),
+          );
+          dto.settings = Object.keys(internal).length
+            ? { ...dto.settings, ...internal }
+            : dto.settings;
+        }
+        const data = this.data(dto);
+        const start =
+          data.startsAt !== undefined
+            ? (data.startsAt as Date | null)
+            : item.startsAt;
+        const end =
+          data.endsAt !== undefined
+            ? (data.endsAt as Date | null)
+            : item.endsAt;
+        if (start && end && start >= end)
+          businessValidation('ends_at', 'Thời gian kết thúc phải sau bắt đầu.');
+        const fixtures = await manager.findBy(TournamentMatch, {
+          tournamentId: id,
+        });
+        if (
+          fixtures.some(
+            (m) =>
+              m.scheduledAt &&
+              ((start && m.scheduledAt < start) ||
+                (end &&
+                  m.scheduledAt.getTime() +
+                    Number(m.metadata?.slot_minutes ?? 30) * 60000 >
+                    end.getTime())),
+          )
+        )
+          businessValidation(
+            'starts_at',
+            'Khoảng thời gian mới không chứa toàn bộ lịch thi đấu.',
+          );
+        if (
+          dto.courts !== undefined &&
+          (dto.courts ?? 2) < item.courts &&
+          fixtures.some((m) => m.court)
+        )
+          businessValidation(
+            'courts',
+            'Không giảm số sân sau khi đã xếp lịch; cần xếp lại lịch trước.',
+          );
+        await manager.save(Tournament, manager.merge(Tournament, item, data));
+      },
+      false,
+      true,
+    );
     return tournamentResponse(
       await this.db.getRepository(Tournament).findOneByOrFail({ id }),
     );

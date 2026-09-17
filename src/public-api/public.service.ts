@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DataSource, ILike, IsNull, Not } from 'typeorm';
+import { DataSource, ILike, IsNull, Not, Raw } from 'typeorm';
 import { rankGroup } from '../competition/standings';
 import type { FindOptionsWhere } from 'typeorm';
 import {
@@ -38,7 +38,16 @@ export class PublicService {
         where: {
           scoreA: IsNull(),
           scheduledAt: Not(IsNull()),
-          tournament: { slug: Not(IsNull()) },
+          tournament: {
+            slug: Not(IsNull()),
+            settings: Raw(
+              (alias) =>
+                `COALESCE(${alias
+                  .split('.')
+                  .map((part) => this.db.driver.escape(part))
+                  .join('.')}->>'operation_status', 'active') = 'active'`,
+            ),
+          },
         },
         relations: publicMatchRelations,
         order: { scheduledAt: 'ASC' },
@@ -189,12 +198,15 @@ export class PublicService {
   }
 
   private summary(tournament: Tournament) {
+    const operation = tournament.settings?.operation_status;
     const status =
-      tournament.status === 'completed'
-        ? 'completed'
-        : ['group', 'knockout'].includes(tournament.status)
-          ? 'live'
-          : 'upcoming';
+      operation === 'paused' || operation === 'cancelled'
+        ? operation
+        : tournament.status === 'completed'
+          ? 'completed'
+          : ['group', 'knockout'].includes(tournament.status)
+            ? 'live'
+            : 'upcoming';
     return {
       id: tournament.id,
       slug: tournament.slug,
@@ -204,12 +216,17 @@ export class PublicService {
         tournament.category || (tournament.format === 'double' ? 'Đôi' : 'Đơn'),
       status,
       status_label:
-        status === 'live'
-          ? 'Đang diễn ra'
-          : status === 'completed'
-            ? 'Đã kết thúc'
-            : 'Sắp diễn ra',
+        status === 'paused'
+          ? 'Tạm ngừng'
+          : status === 'cancelled'
+            ? 'Đã hủy'
+            : status === 'live'
+              ? 'Đang diễn ra'
+              : status === 'completed'
+                ? 'Đã kết thúc'
+                : 'Sắp diễn ra',
       raw_status: tournament.status,
+      operation_reason: tournament.settings?.operation_reason ?? null,
       location: tournament.location || 'Ocean Gym Pickleball',
       description: tournament.description,
       date_label: this.dateLabel(tournament.startsAt, tournament.endsAt),

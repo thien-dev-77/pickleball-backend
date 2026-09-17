@@ -13,6 +13,7 @@ import {
   AdminSession,
   databaseEntities,
   Player,
+  Tournament,
   TournamentMatch,
 } from '../src/database/entities';
 
@@ -561,6 +562,215 @@ describe('TypeORM API integration (isolated PostgreSQL emulator)', () => {
     return { cup, profiles, scheduled };
   }
 
+  it('pauses, resumes and cancels without losing fixtures or results and protects lifecycle settings', async () => {
+    await login();
+    const { cup, scheduled } = await preparedSingle(4);
+    const path = `/tournaments/${cup.id}`;
+    const fixture = scheduled.matches[0];
+    await call(
+      'post',
+      `${path}/operation`,
+      401,
+      { action: 'pause', reason: 'Rain' },
+      false,
+    );
+    await call('post', `${path}/operation`, 422, {
+      action: 'pause',
+      reason: ' ',
+    });
+    await call('post', `${path}/operation`, 422, { action: 'resume' });
+    const paused = await call<Workspace>('post', `${path}/operation`, 201, {
+      action: 'pause',
+      reason: 'Rain',
+    });
+    expect(paused.tournament.settings.operation_status).toBe('paused');
+    expect(paused.matches.map((m) => m.id)).toEqual(
+      scheduled.matches.map((m) => m.id),
+    );
+    await call('post', `/matches/${fixture.id}/score`, 422, {
+      games: [{ a: 11, b: 8 }],
+    });
+    await call('patch', `/matches/${fixture.id}`, 422, { court: 'Sân 2' });
+    await call('post', `${path}/draw`, 422, { group_count: 2, replace: true });
+    await call('post', `${path}/finalize`, 422, { apply_rating: true });
+    await call('patch', path, 422, {
+      settings: { operation_status: 'active' },
+    });
+    await call('patch', path, 422, { settings: { roster_snapshot: {} } });
+    const corrected = await call<{ settings: Record<string, unknown> }>(
+      'patch',
+      path,
+      200,
+      { description: 'Delayed', settings: null },
+    );
+    expect(corrected.settings.operation_status).toBe('paused');
+    expect(corrected.settings.roster_snapshot).toBeDefined();
+    const home = await call<{
+      tournaments: Array<{ id: string; status: string }>;
+      upcoming_matches: Array<{ tournament_id: string }>;
+    }>('get', '/public/home', 200, undefined, false);
+    expect(home.tournaments.find((t) => t.id === cup.id)?.status).toBe(
+      'paused',
+    );
+    expect(home.upcoming_matches.some((m) => m.tournament_id === cup.id)).toBe(
+      false,
+    );
+    await call('post', `${path}/operation`, 201, { action: 'resume' });
+    const scored = await call<Workspace>(
+      'post',
+      `/matches/${fixture.id}/score`,
+      201,
+      { games: [{ a: 11, b: 8 }] },
+    );
+    const cancelled = await call<Workspace>('post', `${path}/operation`, 201, {
+      action: 'cancel',
+      reason: 'Venue closed',
+    });
+    expect(cancelled.matches).toEqual(scored.matches);
+    expect(cancelled.tournament.settings.operation_status).toBe('cancelled');
+    expect(cancelled.tournament.settings.rating_applied).not.toBe(true);
+    expect(cancelled.tournament.settings.operation_history).toHaveLength(3);
+    await call('post', `${path}/operation`, 422, { action: 'resume' });
+    await call('post', `${path}/finalize`, 422, { apply_rating: true });
+    await call('post', `/matches/${fixture.id}/score`, 422, {
+      games: [{ a: 11, b: 9 }],
+    });
+    const detail = await call<{
+      summary: { status: string; operation_reason: string };
+    }>('get', `/public/tournaments/${cup.slug}`, 200, undefined, false);
+    expect(detail.summary).toMatchObject({
+      status: 'cancelled',
+      operation_reason: 'Venue closed',
+    });
+    await db
+      .getRepository(Tournament)
+      .update(cup.id, { status: 'completed', settings: { finalized: true } });
+    await call('post', `${path}/operation`, 422, {
+      action: 'pause',
+      reason: 'Invalid',
+    });
+  });
+
+  it('edits all profile fields during a tournament without changing locked ratings, fixtures or scores', async () => {
+    await login();
+    const { cup, profiles, scheduled } = await preparedSingle(4);
+    const profile = profiles[0];
+    const fixture = scheduled.matches[0];
+    const scored = await call<Workspace>(
+      'post',
+      `/matches/${fixture.id}/score`,
+      201,
+      { games: [{ a: 11, b: 8 }] },
+    );
+    await call('patch', `/players/${profile.id}`, 200, {
+      name: 'Corrected player',
+      rating: 5.25,
+      gender: 'female',
+      hand: 'left',
+      avatar_url: 'https://example.com/new.jpg',
+    });
+    const updated = await call<Workspace>(
+      'get',
+      `/tournaments/${cup.id}/workspace`,
+      200,
+    );
+    const team = updated.teams.find((t) => t.player_one.id === profile.id)!;
+    expect(team.name).toBe('Corrected player');
+    expect(team.total_rating).toBe(profile.rating);
+    expect(team.player_one).toMatchObject({
+      name: 'Corrected player',
+      rating: '5.25',
+      gender: 'female',
+      hand: 'left',
+      avatar_url: 'https://example.com/new.jpg',
+    });
+    expect(
+      updated.matches.map((m) => ({
+        id: m.id,
+        winner: m.winner_team_id,
+        a: m.score_a,
+        b: m.score_b,
+      })),
+    ).toEqual(
+      scored.matches.map((m) => ({
+        id: m.id,
+        winner: m.winner_team_id,
+        a: m.score_a,
+        b: m.score_b,
+      })),
+    );
+    const snapshot = updated.tournament.settings.roster_snapshot as Record<
+      string,
+      { rating: number; gender: string }
+    >;
+    expect(snapshot[profile.id]).toEqual({
+      rating: Number(profile.rating),
+      gender: 'male',
+    });
+    await call('post', `/players/${profile.id}/ratings`, 201, {
+      base_rating: 3,
+      passed_rules: ['serve_consistency'],
+    });
+    const assessed = await call<Workspace>(
+      'get',
+      `/tournaments/${cup.id}/workspace`,
+      200,
+    );
+    expect(assessed.tournament.settings.roster_snapshot).toEqual(snapshot);
+    expect(assessed.teams.find((t) => t.id === team.id)?.total_rating).toBe(
+      profile.rating,
+    );
+  });
+
+  it('uses admission snapshots for mixed pair generation and backfills legacy locked rosters before edits', async () => {
+    await login();
+    const profiles = [
+      await player(1),
+      await player(2),
+      await player(3),
+      await player(4),
+    ];
+    const cup = await tournament('snapshot-mixed');
+    await call('patch', `/tournaments/${cup.id}/competition-settings`, 200, {
+      division: 'mixed',
+      max_team_rating: 6,
+    });
+    await call('post', `/tournaments/${cup.id}/registrations`, 201, {
+      player_ids: profiles.map((p) => p.id),
+      status: 'confirmed',
+    });
+    const locked = await call<Workspace>(
+      'post',
+      `/tournaments/${cup.id}/roster-lock`,
+      201,
+      { locked: true },
+    );
+    const { roster_snapshot: original, ...legacy } = locked.tournament.settings;
+    await db.getRepository(Tournament).update(cup.id, { settings: legacy });
+    await call('patch', `/players/${profiles[0].id}`, 200, {
+      rating: 5.5,
+      gender: 'female',
+    });
+    const entries = await call<Workspace>(
+      'post',
+      `/tournaments/${cup.id}/entries/generate`,
+      201,
+      {},
+    );
+    expect(entries.teams).toHaveLength(2);
+    expect(entries.teams.every((t) => Number(t.total_rating) <= 6)).toBe(true);
+    expect(entries.tournament.settings.roster_snapshot).toEqual(original);
+    await call('post', `/tournaments/${cup.id}/roster-lock`, 201, {
+      locked: true,
+    });
+    const again = await call<Workspace>(
+      'get',
+      `/tournaments/${cup.id}/workspace`,
+      200,
+    );
+    expect(again.tournament.settings.roster_snapshot).toEqual(original);
+  });
+
   it('requires explicit tournament registration, confirmation and roster lock', async () => {
     await login();
     const profiles = [
@@ -809,7 +1019,7 @@ describe('TypeORM API integration (isolated PostgreSQL emulator)', () => {
     await call('post', `/tournaments/${cup.id}/roster-lock`, 201, {
       locked: true,
     });
-    await call('patch', `/players/${profiles[0].id}`, 422, { rating: 4 });
+    await call('patch', `/players/${profiles[0].id}`, 200, { rating: 4 });
     await call('patch', `/tournaments/${cup.id}/competition-settings`, 422, {
       group_target: 15,
     });

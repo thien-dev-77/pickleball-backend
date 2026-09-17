@@ -55,6 +55,24 @@ dieu le cua giai duoc USA Pickleball sanction hoac diem DUPR chinh thuc.
 Moi tab la trang static rieng, giu `?tournament_id=UUID` tren URL. Reload van
 mo dung giai va buoc. Public hien du lieu tu API va khong can dang nhap.
 
+## Ngung giai va sua ho so
+
+- Thanh dieu hanh tren moi tab co Tam ngung/Tiep tuc va Huy giai. Tam ngung
+  can ly do, khoa cac thao tac thi dau nhung giu lich/ket qua; tiep tuc dung
+  giai do. Huy giai can ly do va xac nhan, khong the hoan tac, khong cong diem.
+- Khong ngung/huy giai da hoan thanh hoac chot. Giai ngung/huy van hien thi
+  lich su tren public voi trang thai dung, khong hien trong lich sap toi.
+- Trong VDV tham gia, nut Sua ho so cho sua ten, anh, tay thuan, diem trinh
+  va gioi tinh, ke ca khi giai da chot danh sach hoac dang tam ngung.
+- Sua ho so la cap nhat VDV chung, khong thay thanh vien cap. Diem/gioi tinh
+  luc chot duoc luu trong settings.roster_snapshot; ghep cap, dieu kien du
+  giai va tong diem suat dung snapshot nay. Ho so moi dung cho giai sau.
+- Giai cu chua co snapshot: tu dong luu roster hien tai truoc lan sua ho so
+  dau tien. Mo roster (truoc chia bang), chot lai va tao lai suat de ap dung ho so moi.
+  Ten cap tu sinh cap nhat theo ten VDV, ten cap tuy chinh duoc giu nguyen;
+  ket qua, lich, hat giong va tong diem cap khong bi thay doi.
+- Trang thai va snapshot dung JSON settings hien huu, khong can migration moi.
+
 ## Khoa an toan
 
 - Tao lai suat/bang/lich phai xac nhan `replace:true` va chi khi chua co ket qua.
@@ -63,8 +81,8 @@ mo dung giai va buoc. Public hien du lieu tu API va khong can dang nhap.
   DELETE playoff, sua ty so bang, sau do tao nhanh lai; giu ket qua bang.
 - Sua ket qua can ly do; khoa neu ket qua vong sau phu thuoc da duoc nhap.
 - Chot giai khoa ket qua, thong tin giai va diem thuong. Goi lai finalize khong
-  cong diem lan nua. Diem trinh/gioi tinh VDV khong duoc doi giua giai da chot
-  danh sach va chua ket thuc. Khong xoa VDV co lich su tham gia giai.
+  cong diem lan nua. Ho so VDV van sua duoc; du lieu luc chot roster va ket qua
+  duoc giu nguyen. Khong xoa VDV co lich su tham gia giai.
 - Transaction khoa dong tournament de tranh tao lai/nhap ket qua dong thoi.
 - Lich chi kiem tra trong mot giai, chua giai quyet chia san/VDV giua nhieu
   giai doc lap. Admin phai dieu phoi chung neu cac giai dung cung san.
@@ -90,6 +108,7 @@ da nhap du lieu moi vi down se xoa registrations/metadata.
 | Method | Path sau /api | Tac dung |
 | --- | --- | --- |
 | GET | /tournaments/:id/workspace | Du lieu day du cho van hanh |
+| POST | /tournaments/:id/operation | action pause/resume/cancel, reason |
 | POST | /tournaments/:id/registrations | Dang ky/xac nhan hang loat |
 | PATCH | /tournaments/:id/registrations/:playerId | Trang thai, ghi chu |
 | POST | /tournaments/:id/roster-lock | Chot/mo roster |
