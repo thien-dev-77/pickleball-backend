@@ -15,6 +15,7 @@ import { RatingsModule } from './ratings/ratings.module';
 import { TeamsModule } from './teams/teams.module';
 import { TournamentsModule } from './tournaments/tournaments.module';
 import { CompetitionModule } from './competition/competition.module';
+import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { CompetitionModule } from './competition/competition.module';
     }),
     DatabaseModule,
     CompetitionModule,
+    UploadsModule,
     AuthModule,
     PublicModule,
     PlayersModule,

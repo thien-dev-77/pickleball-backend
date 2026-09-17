@@ -8,6 +8,7 @@ import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { DatabaseExceptionFilter } from '../src/common/database-exception.filter';
 import { validationException } from '../src/common/validation';
+import { UploadsService } from '../src/uploads/uploads.service';
 import {
   AdminSession,
   databaseEntities,
@@ -87,9 +88,16 @@ describe('TypeORM API integration (isolated PostgreSQL emulator)', () => {
   let app: INestApplication<App>;
   let db: DataSource;
   let token = '';
+  const upload = jest.fn();
 
   beforeEach(async () => {
     token = '';
+    upload.mockReset().mockResolvedValue({
+      url: 'https://test-project.supabase.co/storage/v1/object/public/pickleball-images/players/test.webp',
+      path: 'players/test.webp',
+      bucket: 'pickleball-images',
+      size: 100,
+    });
     const memory = newDb({ autoCreateForeignKeyIndices: true });
     memory.public.registerFunction({
       name: 'current_database',
@@ -121,6 +129,8 @@ describe('TypeORM API integration (isolated PostgreSQL emulator)', () => {
       .useValue(db)
       .overrideProvider(ConfigService)
       .useValue(config)
+      .overrideProvider(UploadsService)
+      .useValue({ image: upload })
       .compile();
     app = module.createNestApplication();
     app.setGlobalPrefix('api');
@@ -208,6 +218,44 @@ describe('TypeORM API integration (isolated PostgreSQL emulator)', () => {
       .getRepository(AdminSession)
       .update(sessions[0].id, { expiresAt: new Date(Date.now() - 60000) });
     await call('get', '/admin/status', 401);
+  });
+
+  it('authenticates multipart image uploads and enforces purpose and payload limits', async () => {
+    await request(app.getHttpServer())
+      .post('/api/uploads/images')
+      .field('purpose', 'players')
+      .attach('file', Buffer.from('test'), 'image.png')
+      .expect(401);
+    expect(upload).not.toHaveBeenCalled();
+    await login();
+    await request(app.getHttpServer())
+      .post('/api/uploads/images')
+      .set('Authorization', `Bearer ${token}`)
+      .field('purpose', 'players')
+      .attach('file', Buffer.from('test'), 'image.png')
+      .expect(201);
+    expect(upload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        buffer: Buffer.from('test'),
+        size: 4,
+        mimetype: 'image/png',
+      }),
+      'players',
+    );
+    upload.mockClear();
+    await request(app.getHttpServer())
+      .post('/api/uploads/images')
+      .set('Authorization', `Bearer ${token}`)
+      .field('purpose', '../private')
+      .attach('file', Buffer.from('test'), 'image.png')
+      .expect(422);
+    await request(app.getHttpServer())
+      .post('/api/uploads/images')
+      .set('Authorization', `Bearer ${token}`)
+      .field('purpose', 'players')
+      .attach('file', Buffer.alloc(3 * 1024 * 1024 + 1), 'image.png')
+      .expect(413);
+    expect(upload).not.toHaveBeenCalled();
   });
 
   it('handles player CRUD, filters, pagination, decimals and nullable JSON', async () => {

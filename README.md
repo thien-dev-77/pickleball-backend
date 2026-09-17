@@ -25,6 +25,8 @@ TypeORM ánh xạ trực tiếp các bảng hiện hữu qua `src/database/entit
 
 Quy trình, điều lệ, giới hạn và API mới: [WORKFLOW.md](WORKFLOW.md).
 
+Upload ảnh VĐV và ảnh giải lên Supabase Storage: [STORAGE.md](STORAGE.md). Cần bucket public và key server chỉ cấu hình ở backend/Vercel, không nằm trong frontend static.
+
 ### Supabase: DNS và SSL
 
 Nếu host direct `db.{project-ref}.supabase.co` báo `ENOTFOUND`, kiểm tra kết nối IPv6. Trên mạng chỉ có IPv4, lấy URL **Session pooler** từ Supabase Dashboard > Connect, dùng port `5432` và username `postgres.{project-ref}`. Host pooler phải được sao chép từ Dashboard, không suy ra từ region.
