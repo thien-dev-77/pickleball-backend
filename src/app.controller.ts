@@ -1,23 +1,14 @@
-import { Controller, Get, Header } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
+import { Public } from './common/public.decorator';
 import { AppService } from './app.service';
 
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
+  @Public()
   @Get()
-  @Header('Content-Type', 'text/html')
   getHello(): string {
-    return this.appService.getHello();
-  }
-
-  @Get('/health')
-  getHealth(): string {
-    return 'OK';
-  }
-
-  @Get('/version')
-  getVersion(): string {
-    return '1.0.0';
+    return 'Pickleball API is running';
   }
 }

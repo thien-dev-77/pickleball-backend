@@ -1,85 +1,120 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Pickleball API - NestJS
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend NestJS thay thế REST API Laravel, dùng TypeORM với PostgreSQL/Supabase và cung cấp dữ liệu cho toàn bộ giao diện Next.js.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
-
-## Description
-
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
+## Cấu hình
 
 ```bash
-$ pnpm install
+cp .env.example .env
+npm install
 ```
 
-## Compile and run the project
+NestJS chỉ đọc `backend-nestjs/.env` và biến môi trường hệ thống. Kết nối PostgreSQL chỉ dùng `DATABASE_URL`; không đọc `backend/.env` hoặc ghép URL từ `DB_*`. `.env.example` là file mẫu, không được ứng dụng tự nạp.
+
+Các biến production bắt buộc:
+
+```dotenv
+DATABASE_URL=postgresql://user:password@host:5432/database
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=use-a-strong-password
+CORS_ORIGINS=https://example.com
+PORT=8001
+```
+
+TypeORM ánh xạ trực tiếp các bảng hiện hữu qua `src/database/entities.ts`. `synchronize`, `migrationsRun` và việc tự cài extension đều bị tắt; không cần generate client hoặc migrate lại database đã có.
+
+### Supabase: DNS và SSL
+
+Nếu host direct `db.{project-ref}.supabase.co` báo `ENOTFOUND`, kiểm tra kết nối IPv6. Trên mạng chỉ có IPv4, lấy URL **Session pooler** từ Supabase Dashboard > Connect, dùng port `5432` và username `postgres.{project-ref}`. Host pooler phải được sao chép từ Dashboard, không suy ra từ region.
+
+Ứng dụng vẫn chỉ dùng `DATABASE_URL`:
+
+```dotenv
+DATABASE_URL=postgresql://postgres.your-project-ref:YOUR-ENCODED-PASSWORD@your-pooler-host.pooler.supabase.com:5432/postgres?sslmode=verify-full&sslrootcert=certs/supabase-ca.crt
+```
+
+`certs/supabase-ca.crt` chứa CA công khai Supabase Root 2021, tải qua HTTPS từ `https://supabase-downloads.s3-ap-southeast-1.amazonaws.com/prod/ssl/prod-ca-2021.crt`. Upload cả thư mục `certs` khi deploy và chạy Node với working directory `backend-nestjs`, hoặc dùng đường dẫn tuyệt đối trong tham số `sslrootcert`. Cấu hình giữ xác minh CA và hostname, không dùng `rejectUnauthorized: false`.
+
+Nếu nhận mã PostgreSQL `28P01`, endpoint đã truy cập được nhưng tài khoản/mật khẩu bị từ chối. Cập nhật database password đúng vào URL, percent-encode các ký tự đặc biệt, rồi restart NestJS. Không dùng anon key hoặc service-role key làm database password.
+
+Tham khảo [Supabase connection methods](https://supabase.com/docs/guides/database/connecting-to-postgres) và [SSL enforcement](https://supabase.com/docs/guides/platform/ssl-enforcement).
+
+## Chạy local
+
+Chạy NestJS API ở cổng `8001`:
 
 ```bash
-# development
-$ pnpm run start
-
-# watch mode
-$ pnpm run start:dev
-
-# production mode
-$ pnpm run start:prod
+npm run start:dev
 ```
 
-## Run tests
+API base URL là `http://127.0.0.1:8001/api`. Cấu hình frontend khách hàng và admin:
+
+```dotenv
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8001/api
+STATIC_BUILD_API_URL=http://127.0.0.1:8001/api
+```
+
+## Deploy Vercel
+
+Import repository GitHub vao Vercel, chon Root Directory `.` va Framework Preset
+`NestJS`. Dung Node.js `22.x`, khong dat Output Directory va khong them rewrite
+`/api` thu cong. Vercel nhan dien entrypoint `src/main.ts`.
+
+Them Environment Variables cho Production (Preview neu can):
+
+- `DATABASE_URL`: URL Session pooler tu Supabase Dashboard, port `5432`.
+  Giu `sslmode=verify-full&sslrootcert=certs/supabase-ca.crt` trong URL.
+- `ADMIN_USERNAME`: tai khoan quan tri.
+- `ADMIN_PASSWORD`: mat khau manh, khong dung gia tri mau.
+- `CORS_ORIGINS`: `https://oceangym.com.vn` (origin khong bao gom `/pickleball`).
+
+Khong upload `.env` len GitHub. Vercel cung cap `PORT` va `NODE_ENV`; khong can
+dat thu cong. Database hien huu phai co cac bang nghiep vu va `admin_sessions`.
+Ung dung khong tu tao bang hay seed khi deploy.
+
+`vercel.json` chon region Singapore `sin1` gan Supabase hien tai va dong goi CA
+cong khai vao function. Pool TypeORM gioi han 2 ket noi moi instance tren Vercel.
+
+Sau khi deploy, kiem tra `https://YOUR-PROJECT.vercel.app/api/public/home`.
+Neu frontend goi API bi chan dang nhap Vercel, tat Deployment Protection cho
+production public API theo chinh sach tai khoan cua ban.
+
+Build lai Next static voi
+`NEXT_PUBLIC_API_BASE_URL=https://YOUR-PROJECT.vercel.app/api` va upload ban build
+moi len cPanel. Chi push backend khong tu thay doi URL API trong frontend da build.
+
+Tham khao [NestJS on Vercel](https://vercel.com/docs/frameworks/backend/nestjs).
+
+## Endpoint
+
+- Public: `/api/public/home`, `/api/public/players`, `/api/public/schedule`, `/api/public/tournaments/:slug`
+- Auth: `/api/admin/login`, `/api/admin/status`, `/api/admin/logout`
+- Vận động viên: `/api/players`, `/api/players/:id`
+- Chấm trình: `/api/ratings/rules`, `/api/ratings/calculate`, `/api/players/:id/ratings`
+- Giải đấu: `/api/tournaments`, `/api/tournaments/:id`
+- Đội: `/api/tournaments/:id/teams`, `/api/teams/:id`, endpoint `teams/generate`
+- Bảng: `/api/tournaments/:id/groups`, `/api/groups/:id`, endpoint `groups/randomize`
+- Trận đấu: `/api/matches`, `/api/matches/:id`, endpoint `result` và `generate-round-robin`
+- Nhánh đấu: `/api/tournaments/:id/brackets`, endpoint `brackets/generate`
+
+Ngoại trừ các API `/api/public/*` và `admin/login`, tất cả endpoint đều yêu cầu header:
+
+```http
+Authorization: Bearer <token>
+```
+
+## Kiểm tra
 
 ```bash
-# unit tests
-$ pnpm run test
-
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
+npm run lint
+npm run build
+npm test -- --runInBand
+npm run test:e2e -- --runInBand
+npm run smoke:api
 ```
 
-## Resources
+`smoke:api` cần server NestJS đang chạy. Lệnh tạo một giải tạm, đi hết luồng nghiệp vụ rồi tự xóa dữ liệu kiểm tra.
 
-Check out a few resources that may come in handy when working with NestJS:
+`test:e2e` dùng PostgreSQL emulator `pg-mem` trong bộ nhớ, không truy cập Supabase. Bộ kiểm thử bao gồm API public/admin, phiên đăng nhập, CRUD, bộ lọc, JSON nullable, điểm trình, avatar, ghép đội, vòng bảng và nhánh đấu. Emulator không thay thế việc kiểm tra transaction rollback và kết nối trên PostgreSQL thật.
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Tích hợp sử dụng `TypeOrmModule`, repository và `DataSource.transaction` theo [tài liệu NestJS](https://docs.nestjs.com/techniques/database).
