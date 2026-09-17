@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { databaseUrl } from '../common/database-url';
+import { databaseConnection } from '../common/database-connection';
 import { databaseEntities } from './entities';
 
 @Module({
@@ -10,7 +10,9 @@ import { databaseEntities } from './entities';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         type: 'postgres' as const,
-        url: databaseUrl({ DATABASE_URL: config.get<string>('DATABASE_URL') }),
+        ...databaseConnection({
+          DATABASE_URL: config.get<string>('DATABASE_URL'),
+        }),
         entities: databaseEntities,
         synchronize: false,
         migrationsRun: false,

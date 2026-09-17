@@ -72,8 +72,11 @@ Khong upload `.env` len GitHub. Vercel cung cap `PORT` va `NODE_ENV`; khong can
 dat thu cong. Database hien huu phai co cac bang nghiep vu va `admin_sessions`.
 Ung dung khong tu tao bang hay seed khi deploy.
 
-`vercel.json` chon region Singapore `sin1` gan Supabase hien tai va dong goi CA
-cong khai vao function. Pool TypeORM gioi han 2 ket noi moi instance tren Vercel.
+`vercel.json` chon region Singapore `sin1` gan Supabase hien tai. Khong them
+`functions.src/main.ts`: pattern nay bi Vercel kiem tra nhu function trong `api/`
+va gay loi unmatched-function-pattern. CA cong khai duoc doc bang duong dan
+static trong source de Vercel file tracing dong goi vao function, van xac minh
+TLS va hostname. Pool TypeORM gioi han 2 ket noi moi instance tren Vercel.
 
 Sau khi deploy, kiem tra `https://YOUR-PROJECT.vercel.app/api/public/home`.
 Neu frontend goi API bi chan dang nhap Vercel, tat Deployment Protection cho

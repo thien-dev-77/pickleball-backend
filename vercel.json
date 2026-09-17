@@ -1,10 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nestjs",
-  "regions": ["sin1"],
-  "functions": {
-    "src/main.ts": {
-      "includeFiles": "certs/supabase-ca.crt"
-    }
-  }
+  "regions": ["sin1"]
 }
