@@ -261,14 +261,25 @@ export class TournamentsService {
   }
 
   async remove(id: string) {
-    await this.competition.mutate(id, async (manager, tournament) => {
-      const matches = await manager.findBy(TournamentMatch, {
-        tournamentId: id,
-      });
-      if (tournament.settings?.finalized || matches.some((m) => m.winnerTeamId))
-        businessValidation('tournament', 'Không được xóa giải đã có kết quả.');
-      await manager.delete(Tournament, id);
-    });
+    await this.competition.mutate(
+      id,
+      async (manager, tournament) => {
+        const matches = await manager.findBy(TournamentMatch, {
+          tournamentId: id,
+        });
+        if (
+          tournament.settings?.finalized ||
+          matches.some((m) => m.winnerTeamId)
+        )
+          businessValidation(
+            'tournament',
+            'Không được xóa giải đã có kết quả.',
+          );
+        await manager.delete(Tournament, id);
+      },
+      false,
+      true,
+    );
   }
 
   private data(
