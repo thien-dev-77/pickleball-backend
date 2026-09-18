@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { Public } from '../common/public.decorator';
 import { PublicPlayersQueryDto } from './public.dto';
 import { PublicService } from './public.service';
@@ -15,6 +15,9 @@ export class PublicController {
   }
   @Get('players') players(@Query() query: PublicPlayersQueryDto) {
     return this.publicApi.players(query);
+  }
+  @Get('players/:id') player(@Param('id', ParseUUIDPipe) id: string) {
+    return this.publicApi.player(id);
   }
   @Get('tournaments/:slug') show(@Param('slug') slug: string) {
     return this.publicApi.show(slug);

@@ -94,7 +94,7 @@ Tham khao [NestJS on Vercel](https://vercel.com/docs/frameworks/backend/nestjs).
 
 ## Endpoint
 
-- Public: `/api/public/home`, `/api/public/players`, `/api/public/schedule`, `/api/public/tournaments/:slug`
+- Public: `/api/public/home`, `/api/public/players`, `/api/public/players/:id`, `/api/public/schedule`, `/api/public/tournaments/:slug`
 - Auth: `/api/admin/login`, `/api/admin/status`, `/api/admin/logout`
 - Vận động viên: `/api/players`, `/api/players/:id`
 - Chấm trình: `/api/ratings/rules`, `/api/ratings/calculate`, `/api/players/:id/ratings`

@@ -101,8 +101,8 @@ export class PublicService {
       where,
       order:
         query.sort === 'rating'
-          ? { rating: 'DESC', name: 'ASC' }
-          : { name: 'ASC' },
+          ? { rating: 'DESC', name: 'ASC', id: 'ASC' }
+          : { name: 'ASC', id: 'ASC' },
       skip: (query.page - 1) * query.per_page,
       take: query.per_page,
     });
@@ -112,6 +112,30 @@ export class PublicService {
       query.page,
       query.per_page,
     );
+  }
+
+  async player(id: string) {
+    const repo = this.db.getRepository(Player);
+    const player = await repo.findOneByOrFail({ id });
+    const [ahead, total] = await Promise.all([
+      repo
+        .createQueryBuilder('player')
+        .where('player.rating > :rating', { rating: player.rating })
+        .orWhere('player.rating = :rating AND player.name < :name', {
+          name: player.name,
+        })
+        .orWhere(
+          'player.rating = :rating AND player.name = :name AND player.id < :id',
+          { id },
+        )
+        .getCount(),
+      repo.count(),
+    ]);
+    return {
+      player: publicPlayerResponse(player),
+      rank: ahead + 1,
+      total_players: total,
+    };
   }
 
   async show(slug: string) {

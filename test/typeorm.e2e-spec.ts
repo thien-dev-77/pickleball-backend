@@ -309,6 +309,81 @@ describe('TypeORM API integration (isolated PostgreSQL emulator)', () => {
     expect(await db.getRepository(Player).count()).toBe(1);
   });
 
+  it('serves public player profiles with stable ranks and no private metadata', async () => {
+    await login();
+    const profiles = await Promise.all([player(1), player(2), player(3)]);
+    await call('patch', `/players/${profiles[0].id}`, 200, {
+      name: 'Same Player',
+      rating: 3,
+    });
+    await call('patch', `/players/${profiles[1].id}`, 200, {
+      name: 'Same Player',
+      rating: 3,
+      avatar_url: null,
+      hand: 'left',
+    });
+    await call('patch', `/players/${profiles[2].id}`, 200, {
+      name: 'Another Player',
+      rating: 3,
+    });
+    const ranked = await call<Page<{ id: string }>>(
+      'get',
+      '/public/players?sort=rating',
+      200,
+      undefined,
+      false,
+    );
+    for (const [index, player] of ranked.data.entries()) {
+      const detail = await call<{
+        player: Record<string, unknown>;
+        rank: number;
+        total_players: number;
+      }>('get', `/public/players/${player.id}`, 200, undefined, false);
+      expect(detail).toMatchObject({
+        player: { id: player.id, rating: 3 },
+        rank: index + 1,
+        total_players: 3,
+      });
+      expect(Object.keys(detail.player).sort()).toEqual([
+        'avatar_url',
+        'gender',
+        'hand',
+        'id',
+        'name',
+        'rating',
+      ]);
+    }
+    const detail = await call<{ player: Record<string, unknown> }>(
+      'get',
+      `/public/players/${profiles[1].id}`,
+      200,
+      undefined,
+      false,
+    );
+    expect(detail.player).toMatchObject({ avatar_url: null, hand: 'left' });
+    await call('get', '/public/players/not-a-uuid', 400, undefined, false);
+    await call(
+      'get',
+      '/public/players/11111111-1111-4111-8111-111111111111',
+      404,
+      undefined,
+      false,
+    );
+    await call('get', `/players/${profiles[0].id}`, 401, undefined, false);
+    await call('patch', `/players/${profiles[0].id}`, 200, {
+      name: 'Updated Profile',
+      rating: 4,
+    });
+    const updated = await call<{
+      player: Record<string, unknown>;
+      rank: number;
+    }>('get', `/public/players/${profiles[0].id}`, 200, undefined, false);
+    expect(updated).toMatchObject({
+      player: { name: 'Updated Profile', rating: 4 },
+      rank: 1,
+    });
+  });
+
   it('handles tournament CRUD, relation counts, duplicate slugs and JSON clearing', async () => {
     await login();
     const cup = await tournament();
