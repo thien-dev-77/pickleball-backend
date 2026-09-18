@@ -263,22 +263,13 @@ export class TournamentsService {
   async remove(id: string) {
     await this.competition.mutate(
       id,
-      async (manager, tournament) => {
-        const matches = await manager.findBy(TournamentMatch, {
-          tournamentId: id,
-        });
-        if (
-          tournament.settings?.finalized ||
-          matches.some((m) => m.winnerTeamId)
-        )
-          businessValidation(
-            'tournament',
-            'Không được xóa giải đã có kết quả.',
-          );
+      async (manager) => {
+        // Admin có thể xóa bất kỳ giải nào
+        // Cascade delete sẽ tự động xóa teams, groups, matches, registrations
         await manager.delete(Tournament, id);
       },
-      false,
-      true,
+      true, // allowFinalized = true
+      true, // allowStopped = true
     );
   }
 
