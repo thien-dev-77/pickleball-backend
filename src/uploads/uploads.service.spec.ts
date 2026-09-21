@@ -24,9 +24,6 @@ describe('Supabase image uploads', () => {
   beforeEach(() => {
     fetchMock = jest
       .spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ public: true }), { status: 200 }),
-      )
       .mockResolvedValue(new Response('{}', { status: 200 }));
   });
   afterEach(() => jest.restoreAllMocks());
@@ -36,7 +33,7 @@ describe('Supabase image uploads', () => {
     expect(result.url).toMatch(
       /^https:\/\/test-project.supabase.co\/storage\/v1\/object\/public\/pickleball-images\/players\/[a-f0-9-]+\.webp$/,
     );
-    const [url, request] = fetchMock.mock.calls[1] as [string, RequestInit];
+    const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toContain('/storage/v1/object/pickleball-images/players/');
     expect(request.method).toBe('POST');
     expect(request.headers).toMatchObject({
@@ -67,15 +64,13 @@ describe('Supabase image uploads', () => {
       file(buffer, 'image/jpeg'),
       'tournaments',
     );
-    fetchMock
-      .mockResolvedValueOnce(new Response(JSON.stringify({ public: true })))
-      .mockResolvedValue(new Response('{}'));
+    fetchMock.mockResolvedValue(new Response('{}'));
     const second = await service().image(
       file(buffer, 'image/jpeg'),
       'tournaments',
     );
     expect(first.path).not.toBe(second.path);
-    const [, request] = fetchMock.mock.calls[1] as [string, RequestInit];
+    const [, request] = fetchMock.mock.calls[0] as [string, RequestInit];
     const meta = await sharp(
       Buffer.from(request.body as Uint8Array),
     ).metadata();
@@ -90,7 +85,7 @@ describe('Supabase image uploads', () => {
         SUPABASE_SECRET_KEY: 'sb_secret_server-only',
       }),
     ).image(file(await png()), 'players');
-    const [, request] = fetchMock.mock.calls[1] as [string, RequestInit];
+    const [, request] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(request.headers).toMatchObject({ apikey: 'sb_secret_server-only' });
     expect(request.headers).not.toHaveProperty('Authorization');
     expect(JSON.stringify(result)).not.toContain('sb_secret_server-only');
@@ -125,7 +120,7 @@ describe('Supabase image uploads', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('returns actionable errors for missing config, private buckets and storage failures', async () => {
+  it('returns actionable errors for missing config, connection failures and storage failures', async () => {
     await expect(
       new UploadsService(new ConfigService({})).image(
         file(await png()),
@@ -134,14 +129,13 @@ describe('Supabase image uploads', () => {
     ).rejects.toMatchObject({ status: 503 });
     fetchMock
       .mockReset()
-      .mockResolvedValue(new Response(JSON.stringify({ public: false })));
+      .mockRejectedValue(new Error('network down'));
     await expect(
       service().image(file(await png()), 'players'),
     ).rejects.toMatchObject({ status: 503 });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     fetchMock
       .mockReset()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ public: true })))
       .mockResolvedValue(
         new Response('private upstream details', { status: 403 }),
       );

@@ -88,14 +88,6 @@ export class UploadsService {
           ? {}
           : { Authorization: `Bearer ${key}` }),
       };
-      const bucketResponse = await fetch(`${url}/storage/v1/bucket/${bucket}`, {
-        headers: credentials,
-        signal: AbortSignal.timeout(10000),
-        redirect: 'error',
-      });
-      if (!bucketResponse.ok) throw new Error('Bucket unavailable');
-      const details = (await bucketResponse.json()) as { public?: boolean };
-      if (details.public !== true) throw new Error('Bucket must be public');
       response = await fetch(
         `${url}/storage/v1/object/${bucket}/${objectPath}`,
         {
@@ -111,15 +103,25 @@ export class UploadsService {
           redirect: 'error',
         },
       );
-    } catch {
+    } catch (error) {
+      console.error('Supabase Storage upload connection failed', {
+        bucket,
+        message: error instanceof Error ? error.message : String(error),
+      });
       throw new ServiceUnavailableException(
-        'Không kết nối được bucket public. Kiểm tra cấu hình Supabase Storage và thử lại.',
+        'Không kết nối được Supabase Storage. Kiểm tra cấu hình bucket và thử lại.',
       );
     }
-    if (!response.ok)
+    if (!response.ok) {
+      console.error('Supabase Storage upload failed', {
+        bucket,
+        status: response.status,
+        statusText: response.statusText,
+      });
       throw new ServiceUnavailableException(
         'Upload thất bại. Kiểm tra key backend, bucket public và quyền Storage trong Supabase.',
       );
+    }
     return {
       url: `${url}/storage/v1/object/public/${bucket}/${objectPath}`,
       path: objectPath,
