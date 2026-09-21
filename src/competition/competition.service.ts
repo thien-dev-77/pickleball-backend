@@ -546,11 +546,8 @@ export class CompetitionService {
       )
     )
       businessValidation('player_ids', 'VĐV đã thuộc suất thi đấu khác.');
-    const players = playerIds.map((id) =>
-      rosterPlayer(
-        registrations.find((r) => r.playerId === id)!.player,
-        tournament,
-      ),
+    const players = playerIds.map(
+      (id) => registrations.find((r) => r.playerId === id)!.player,
     );
     this.validateMembers(players, tournament);
     return players;
@@ -606,7 +603,7 @@ export class CompetitionService {
         );
       const pool = registrations
         .filter((r) => ids.includes(r.playerId))
-        .map((r) => rosterPlayer(r.player, tournament))
+        .map((r) => r.player)
         .sort((a, b) => b.rating - a.rating);
       const entries: Player[][] = [];
       if (tournament.format === 'single')

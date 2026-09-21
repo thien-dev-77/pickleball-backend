@@ -3,6 +3,11 @@ type RecordLike = Record<string, any>;
 
 const iso = (value?: Date | null) => value?.toISOString() ?? null;
 const decimal = (value: unknown) => Number(value ?? 0).toFixed(2);
+const teamTotalRating = (team: RecordLike) => {
+  const players = [team.playerOne, team.playerTwo].filter(Boolean);
+  if (!players.length) return Number(team.totalRating ?? 0);
+  return players.reduce((sum, player) => sum + Number(player.rating ?? 0), 0);
+};
 
 export function playerResponse(player: RecordLike) {
   return {
@@ -69,7 +74,7 @@ export function teamResponse(
     name: team.name,
     player_one_id: team.playerOneId,
     player_two_id: team.playerTwoId ?? null,
-    total_rating: decimal(team.totalRating),
+    total_rating: decimal(teamTotalRating(team)),
     seed: team.seed ?? null,
     created_at: iso(team.createdAt),
     updated_at: iso(team.updatedAt),
@@ -87,7 +92,7 @@ export function publicTeamResponse(
   return {
     id: team.id,
     name: team.name,
-    total_rating: Number(team.totalRating),
+    total_rating: teamTotalRating(team),
     seed: team.seed ?? null,
     players: [team.playerOne, team.playerTwo]
       .filter(Boolean)
