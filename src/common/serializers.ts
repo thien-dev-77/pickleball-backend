@@ -76,6 +76,7 @@ export function teamResponse(
     player_two_id: team.playerTwoId ?? null,
     total_rating: decimal(teamTotalRating(team)),
     seed: team.seed ?? null,
+    payment_confirmed: team.paymentConfirmed === true,
     created_at: iso(team.createdAt),
     updated_at: iso(team.updatedAt),
     ...(team.playerOne ? { player_one: playerResponse(team.playerOne) } : {}),
@@ -94,6 +95,7 @@ export function publicTeamResponse(
     name: team.name,
     total_rating: teamTotalRating(team),
     seed: team.seed ?? null,
+    payment_confirmed: team.paymentConfirmed === true,
     players: [team.playerOne, team.playerTwo]
       .filter(Boolean)
       .map(publicPlayerResponse),

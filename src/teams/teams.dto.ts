@@ -14,6 +14,7 @@ export class CreateTeamDto {
   @IsUUID() player_one_id!: string;
   @IsOptional() @IsUUID() player_two_id?: string | null;
   @IsOptional() @IsInt() @Min(1) seed?: number | null;
+  @IsOptional() @IsBoolean() payment_confirmed?: boolean;
 }
 
 export class UpdateTeamDto {
@@ -21,6 +22,7 @@ export class UpdateTeamDto {
   @IsOptional() @IsUUID() player_two_id?: string | null;
   @IsOptional() @IsString() @MaxLength(160) name?: string;
   @IsOptional() @IsInt() @Min(1) seed?: number | null;
+  @IsOptional() @IsBoolean() payment_confirmed?: boolean;
 }
 
 export class GenerateTeamsDto {

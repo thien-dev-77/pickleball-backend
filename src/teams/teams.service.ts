@@ -50,6 +50,7 @@ export class TeamsService {
             playerTwoId: players[1]?.id ?? null,
             totalRating: players.reduce((sum, p) => sum + p.rating, 0),
             seed: dto.seed ?? null,
+            paymentConfirmed: dto.payment_confirmed ?? false,
           }),
         );
         return team.id;
@@ -89,6 +90,10 @@ export class TeamsService {
           playerOneId: players[0].id,
           playerTwoId: players[1]?.id ?? null,
           totalRating: players.reduce((sum, p) => sum + p.rating, 0),
+          paymentConfirmed:
+            dto.payment_confirmed !== undefined
+              ? dto.payment_confirmed
+              : team.paymentConfirmed,
         });
       },
     );

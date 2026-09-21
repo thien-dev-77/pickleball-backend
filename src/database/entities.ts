@@ -128,6 +128,8 @@ export class Team extends UuidEntity {
   })
   totalRating = 0;
   @Column({ type: 'integer', nullable: true }) seed: number | null = null;
+  @Column({ name: 'payment_confirmed', type: 'boolean', default: false })
+  paymentConfirmed = false;
   @ManyToOne(() => Tournament, (tournament) => tournament.teams, {
     onDelete: 'CASCADE',
   })
