@@ -872,11 +872,7 @@ export class CompetitionService {
         if (
           count < ranked.length &&
           ranked[count - 1].tied &&
-          ranked[count].tied &&
-          ranked[count - 1].wins === ranked[count].wins &&
-          ranked[count - 1].head_to_head === ranked[count].head_to_head &&
-          ranked[count - 1].diff === ranked[count].diff &&
-          ranked[count - 1].points_for === ranked[count].points_for
+          ranked[count].tied
         )
           businessValidation(
             'standings',

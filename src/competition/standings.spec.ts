@@ -13,9 +13,39 @@ const result = (a: string, b: string, winner: string, sa = 11, sb = 9) =>
 
 describe('club pool standings', () => {
   it('uses wins before rally-point difference', () => {
+    const rankings = rankGroup(teams.slice(0, 2), [
+      result('a', 'b', 'b', 23, 22),
+    ]);
+    expect(rankings[0].team.id).toBe('b');
+    expect(rankings[0].points).toBe(1);
+  });
+  it('uses direct head-to-head only for two-team ties', () => {
+    const games = [
+      result('a', 'b', 'b', 11, 9),
+      result('a', 'c', 'a', 11, 0),
+      result('b', 'c', 'b', 11, 0),
+    ];
+    expect(rankGroup(teams, games).map((r) => r.team.id)).toEqual([
+      'b',
+      'a',
+      'c',
+    ]);
+  });
+  it('uses mini-table point difference before full-tournament difference for three-team ties', () => {
+    const games = [
+      result('a', 'b', 'a', 11, 5),
+      result('b', 'c', 'b', 11, 10),
+      result('c', 'a', 'c', 11, 10),
+      result('a', 'd', 'a', 11, 0),
+      result('b', 'd', 'b', 11, 0),
+      result('c', 'd', 'c', 11, 9),
+    ];
+    const pool = [...teams, { id: 'd' } as Team];
     expect(
-      rankGroup(teams.slice(0, 2), [result('a', 'b', 'b', 23, 22)])[0].team.id,
-    ).toBe('b');
+      rankGroup(pool, games)
+        .map((r) => r.team.id)
+        .slice(0, 3),
+    ).toEqual(['a', 'c', 'b']);
   });
   it('flags circular ties instead of silently qualifying a UUID', () => {
     const games = [

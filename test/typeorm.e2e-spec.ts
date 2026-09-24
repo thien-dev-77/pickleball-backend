@@ -555,7 +555,7 @@ describe('TypeORM API integration (isolated PostgreSQL emulator)', () => {
         (p) => p.avatar_url && typeof p.rating === 'number',
       ),
     ).toBe(true);
-    expect(detail.groups[0].standings[0].points).toBe(3);
+    expect(detail.groups[0].standings[0].points).toBe(1);
     await call('get', '/public/home', 200, undefined, false);
     const schedule = await call<Array<{ team_a: PublicPair | null }>>(
       'get',
@@ -595,14 +595,19 @@ describe('TypeORM API integration (isolated PostgreSQL emulator)', () => {
     await call('get', '/public/schedule', 200, undefined, false);
   });
 
-  async function preparedSingle(count = 6, groupCount = 2) {
+  async function preparedSingle(count = 6, groupCount = 2, courtCount = 2) {
     const profiles: Profile[] = [];
     for (let i = 1; i <= count; i++) profiles.push(await player(i));
     const cup = await call<{ id: string; slug: string }>(
       'post',
       '/tournaments',
       201,
-      { name: 'Singles Cup', format: 'single', max_teams: count, courts: 2 },
+      {
+        name: 'Singles Cup',
+        format: 'single',
+        max_teams: count,
+        courts: courtCount,
+      },
     );
     await call('post', `/tournaments/${cup.id}/registrations`, 201, {
       player_ids: profiles.map((p) => p.id),
@@ -629,7 +634,7 @@ describe('TypeORM API integration (isolated PostgreSQL emulator)', () => {
       201,
       {
         starts_at: '2026-10-01T08:00:00.000Z',
-        court_count: 2,
+        court_count: courtCount,
         slot_minutes: 30,
         rest_minutes: 10,
       },
@@ -953,6 +958,25 @@ describe('TypeORM API integration (isolated PostgreSQL emulator)', () => {
     await call('post', `/tournaments/${cup.id}/entries/generate`, 422, {
       replace: true,
     });
+  });
+
+  it('schedules an 8-team round robin as 7 rounds on 4 courts', async () => {
+    await login();
+    const { scheduled } = await preparedSingle(8, 1, 4);
+    const groupMatches = scheduled.matches.filter((m) => m.stage === 'group');
+    const slots = new Map<string, typeof groupMatches>();
+    for (const match of groupMatches) {
+      const key = match.scheduled_at!;
+      slots.set(key, [...(slots.get(key) ?? []), match]);
+    }
+    expect(groupMatches).toHaveLength(28);
+    expect(slots.size).toBe(7);
+    for (const matches of slots.values()) {
+      expect(matches).toHaveLength(4);
+      expect(new Set(matches.map((m) => m.court)).size).toBe(4);
+      const teamIds = matches.flatMap((m) => [m.team_a_id, m.team_b_id]);
+      expect(new Set(teamIds).size).toBe(8);
+    }
   });
 
   it('validates mixed doubles, rating eligibility and registration capacity', async () => {
